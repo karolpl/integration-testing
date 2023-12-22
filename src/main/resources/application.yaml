@@ -1,0 +1,26 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  datasource:
+    url: "jdbc:postgresql://localhost:5432/integration-testing-db"
+    username: postgres
+    password: admin1234
+    local: true
+  kafka:
+    should-log-payload: true
+    bootstrap-servers: localhost:9595
+    enabled: true
+    input:
+      topic:
+        account-updated:
+          name: account.update.completed.v1
+          group-id: account.update.completed.group-id.v1
+    output:
+      topic:
+        account-deleted: account.delete.completed.v1
+
+servers:
+  url:
+    account-details-service: http://localhost:8081/account-details-service

@@ -1,0 +1,89 @@
+version: '3.7'
+services:
+  data_store:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    container_name: integration-testing-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin1234
+      POSTGRES_DB: integration-testing-db
+    restart: always
+
+  pgadmin:
+    image: dpage/pgadmin4
+    depends_on:
+      - data_store
+    ports:
+      - "8001:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: user@domain.org
+      PGADMIN_DEFAULT_PASSWORD: admin1234
+    restart: always
+
+  flyway:
+    image: flyway/flyway
+    command: -url=jdbc:postgresql://data_store:5432/integration-testing-db -user=postgres -password=admin1234 migrate
+    volumes:
+      - "./src/main/resources/db/migration:/flyway/sql"
+    restart: on-failure:3
+    depends_on:
+      - data_store
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:6.2.1
+    hostname: zookeeper
+    container_name: integration-testing-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2581
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:6.2.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9595:9595"
+      - "9596:9596"
+      - "9501:9501"
+    environment:
+      KAFKA_LISTENERS: BROKER://kafka:9596, CONNECTIONS_FROM_HOST://kafka:9595
+      KAFKA_ADVERTISED_LISTENERS: BROKER://kafka:9596, CONNECTIONS_FROM_HOST://localhost:9595
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONNECTIONS_FROM_HOST:PLAINTEXT, BROKER:PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2581
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9501
+      KAFKA_JMX_HOSTNAME: localhost
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:6.2.1
+    hostname: schema-registry
+    container_name: integration-testing-schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "9085:9085"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:9596'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:9085
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    depends_on:
+      - zookeeper
+      - kafka
+    container_name: integration-testing-kafka-ui
+    ports:
+      - "8505:8080"
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=kafka
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9596
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2581
+      - KAFKA_CLUSTERS_0_SCHEMAREGISTRY=http://schema-registry:9085
